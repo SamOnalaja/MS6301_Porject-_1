@@ -110,78 +110,46 @@ missingIBUindex <- which(is.na(merged$IBU))
 missingABVindex <- which(is.na(merged$ABV))
 allNAindex <- c(missingIBUindex,missingABVindex)
 length(missingIBUindex)
+length(missingABVindex)
 length(unique(allNAindex)) 
+
+#remove Missing values
+merged_remove <- merged %>% filter(!is.na(ABV) & !is.na(IBU))
+#To check for missing data again
+vis_miss(merged_remove)
+md.pattern(merged_remove)
 ```
 
-# Fill IBU missing values: 
-We used a regression tree with ABV and Beer Style as predictors to fill missing IBU values.
-Filled IBU values are placed in the merged data frame as merged$IBUfill.
 ```{r}
-# Let's try a regression tree (CART)...throw the kitchen sink at it...:)
-# If I get some time, I'd like to tree a bagging algorithm: http://uc-r.github.io/regression_trees
-library(rpart)
-library(rpart.plot)
-# ?rpart
+#Question 4 
+# drop any observations without valid ABV values, group by state, and compute the median
+MedianAbv <- merged_remove %>% group_by(State) %>% summarize(median_abv = median(ABV,na.rm=TRUE))
 
-# Get data into the right format:
-Training_IBU_rtreeTrain <- merged[-missingIBUindex,] %>% 
-  select(ABV,Style,Brewery_name,City,State,Ounces,IBU)
+#Plot
+MedianAbv %>% ggplot(aes(x = State, y = median_abv)) + geom_col(color="black",fill="red") + 
+  theme(aspect.ratio = 0.2,axis.text=element_text(size=4)) +
+  ylab('Median ABV') + 
+  ggtitle('Median ABV by state (WithoutMissing Value)')
+```
 
-Filling_IBU_rtreeTrain <- merged[missingIBUindex,] %>% 
-  select(ABV,Style,Brewery_name,City,State,Ounces,IBU)
+```{r}
 
-# set up train/test split
-set.seed(8)
-splitPerc = .75
-trainIndices = sample(1:dim(Training_IBU_rtreeTrain)[1],round(splitPerc * dim(Training_IBU_rtreeTrain)[1]))
-train = Training_IBU_rtreeTrain[trainIndices,]
-test = Training_IBU_rtreeTrain[-trainIndices,]
+# drop any observations without valid IBU values, group by state, and compute the median
+MedianIBU <- merged_remove %>% group_by(State) %>% summarize(median_IBU = median(IBU,na.rm=TRUE))
 
-# train the model
-rtreeTrain <- rpart(IBU ~ ABV+Style, 
-               data = train,
-               method = "anova",
-               control = list(cp = 0.0001, xval = 1000))
+#Plot
+MedianIBU %>% ggplot(aes(x = State, y = median_IBU)) + geom_col(color="black",fill="red") + 
+  theme(aspect.ratio = 0.2,axis.text=element_text(size=4)) +
+  ylab('Median IBU') + 
+  ggtitle('Median IBU by state (WithoutMissing Value)')
+```
 
-plotcp(rtreeTrain) # visualize relative error by tree size
-# prp(rtreeTrain) # visualize the tree structure
+```{r}
+#Question 5
+# drop any observations without valid ABV values, group by state, and compute the Max
+MaxAbv <- merged_remove %>% group_by(State) %>% summarize(max_abv = max(ABV,na.rm=TRUE)) %>% arrange(desc(max_abv))
 
-######
-# evaluate model performance
-rtreeTrain.pred = predict(rtreeTrain, test)
-rtreeTrain.sse = sum((rtreeTrain.pred - test$IBU)^2)
-rtreeTrain.mse = mean((rtreeTrain.pred - test$IBU)^2)
-rtreeTrain.rmse = sqrt(mean((rtreeTrain.pred - test$IBU)^2))
-rtreeTrain.sse
-rtreeTrain.mse
-rtreeTrain.rmse
+# drop any observations without valid IBU values, group by state, and compute the Max
+MaxIBU <- merged_remove %>% group_by(State) %>% summarize(max_ibu = max(IBU,na.rm=TRUE)) %>% arrange(desc(max_ibu))
 
-test$predictions <- rtreeTrain.pred
-
-test %>% ggplot(aes(x=IBU, y=predictions)) +
-  geom_point(col="#13294b") +
-  geom_text(x=25, y=110, label="RMSE = 13.1") +
-  geom_text(x=20, y = 100, label='R2 = 0.75') +
-  geom_smooth(method='lm', col="#c8102e") +
-  labs(title='Regression Tree Model Performance', x="Actual IBU", y="Predicted IBU")
-######
-
-# now that model performance is complete, fit a new model using all available data. This model will be used to fill IBU values.
-rtreeTrain <- rpart(IBU ~ ABV+Style, 
-               data = Training_IBU_rtreeTrain,
-               method = "anova",
-               control = list(cp = 0.0001, xval = 1000))
-
-### sanity check before updating the "merged" data frame
-# merged$IBU[missingIBUindex[1]]
-# merged$IBU[missingIBUindex[2]]
-# predict(rtreeTrain, Filling_IBU_rtreeTrain[1,])
-# predict(rtreeTrain, Filling_IBU_rtreeTrain[2,])
-
-merged$IBUfill <- merged$IBU
-merged$IBUfill[missingIBUindex] <- predict(rtreeTrain, Filling_IBU_rtreeTrain)
-
-### complete the sanity check:
-# merged$IBU[missingIBUindex[1]]
-# merged$IBU[missingIBUindex[2]]
 ```
